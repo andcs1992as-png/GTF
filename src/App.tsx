@@ -18,6 +18,13 @@ type RankingEntry = {
   losses: number
   battles_played: number
 }
+type Fighter = { id: string; display_name: string; description: string; image_url: string | null }
+type QueueEntry = {
+  id: string
+  status: 'waiting' | 'matched' | 'in_match' | 'cancelled' | 'expired'
+  opponent_id: string | null
+  match_id: string | null
+}
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
@@ -31,10 +38,14 @@ export default function App() {
   const [onlineCount, setOnlineCount] = useState(0)
   const [lobbyMessage, setLobbyMessage] = useState('')
   const [rankingLoading, setRankingLoading] = useState(false)
-  const [catalog, setCatalog] = useState<{id:string;display_name:string;description:string;image_url:string|null}[]>([])
+  const [catalog, setCatalog] = useState<Fighter[]>([])
   const [chosen, setChosen] = useState('')
-  const [mode, setMode] = useState<'SOLO'|'VERSUS'|null>(null)
-  const [view, setView] = useState<'lobby'|'select'|'queue'>('lobby')
+  const [mode, setMode] = useState<'SOLO' | 'VERSUS' | null>(null)
+  const [view, setView] = useState<'lobby' | 'select' | 'queue'>('lobby')
+  const [queueEntry, setQueueEntry] = useState<QueueEntry | null>(null)
+  const [queueLoading, setQueueLoading] = useState(false)
+  const [queueError, setQueueError] = useState('')
+  const [opponentName, setOpponentName] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -55,7 +66,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-  if (!user) {
+    if (!user) {
       setProfile(null)
       setRanking([])
       setOnlineCount(0)
@@ -72,7 +83,7 @@ export default function App() {
         supabase.from('character_catalog').select('id,display_name,description,image_url').order('sort_order'),
       ])
       if (!active) return
-      if (profileData) { setProfile(profileData as Profile); setChosen(profileData.selected_character_id ?? '') }
+      if (profileData) setProfile(profileData as Profile)
       setCatalog(fighters ?? [])
       const statsByUser = new Map((statsData ?? []).map((stat) => [stat.user_id, stat]))
       const combined = (profilesData ?? []).map((player) => ({
@@ -83,7 +94,7 @@ export default function App() {
       setRanking(combined.slice(0, 10))
       setRankingLoading(false)
     }
-    loadLobby()
+    void loadLobby()
     return () => { active = false }
   }, [user])
 
@@ -109,6 +120,60 @@ export default function App() {
     return () => { void supabase.removeChannel(channel) }
   }, [user, profile?.username])
 
+  useEffect(() => {
+    if (!user || view !== 'queue' || !queueEntry?.id) return
+    let active = true
+
+    const refreshQueue = async () => {
+      const { data, error } = await supabase
+        .from('matchmaking_queue')
+        .select('id,status,opponent_id,match_id')
+        .eq('id', queueEntry.id)
+        .maybeSingle()
+      if (!active || error || !data) return
+      setQueueEntry(data as QueueEntry)
+    }
+
+    const channel = supabase
+      .channel(`gtf-matchmaking-${queueEntry.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'matchmaking_queue',
+        filter: `player_id=eq.${user.id}`,
+      }, () => { void refreshQueue() })
+      .subscribe()
+
+    const poll = window.setInterval(() => { void refreshQueue() }, 5000)
+    const heartbeat = window.setInterval(async () => {
+      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: chosen })
+      if (!active || error || !data) return
+      setQueueEntry(data as QueueEntry)
+    }, 30000)
+
+    void refreshQueue()
+    return () => {
+      active = false
+      window.clearInterval(poll)
+      window.clearInterval(heartbeat)
+      void supabase.removeChannel(channel)
+    }
+  }, [user, view, queueEntry?.id, chosen])
+
+  useEffect(() => {
+    if (!queueEntry?.opponent_id || queueEntry.status !== 'matched') {
+      setOpponentName('')
+      return
+    }
+    let active = true
+    supabase.from('player_profiles').select('username')
+      .eq('user_id', queueEntry.opponent_id).maybeSingle()
+      .then(({ data }) => {
+        if (active) setOpponentName(data?.username ?? 'Adversário encontrado')
+      })
+    return () => { active = false }
+  }, [queueEntry?.opponent_id, queueEntry?.status])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setMessage('')
@@ -127,14 +192,18 @@ export default function App() {
   }
 
   async function handleLogout() {
+    if (queueEntry?.status === 'waiting') await supabase.rpc('matchmaking_cancel')
     await supabase.auth.signOut()
     setLobbyMessage('')
     setMessage('')
+    setQueueEntry(null)
   }
 
   function chooseMode(nextMode: 'SOLO' | 'VERSUS') {
     setMode(nextMode)
-    setChosen(profile?.selected_character_id ?? '')
+    setChosen(profile?.selected_character_id ?? catalog[0]?.id ?? '')
+    setQueueEntry(null)
+    setQueueError('')
     setLobbyMessage('')
     setView('select')
   }
@@ -143,9 +212,41 @@ export default function App() {
     if (!chosen) return
     const fighter = catalog.find((item) => item.id === chosen)
     if (!fighter) return
-    // A escolha vale apenas para esta partida; o personagem principal do Lobby permanece intacto.
-    setView(mode === 'VERSUS' ? 'queue' : 'lobby')
-    setLobbyMessage(mode === 'SOLO' ? `Lutador escolhido para esta partida: ${fighter.display_name}. O combate SOLO será implementado na próxima etapa.` : '')
+
+    if (mode === 'VERSUS') {
+      setQueueLoading(true)
+      setQueueError('')
+      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: chosen })
+      setQueueLoading(false)
+      if (error) {
+        setQueueError('Não foi possível entrar na fila agora. Tente novamente.')
+        return
+      }
+      setQueueEntry(data as QueueEntry)
+      setView('queue')
+      return
+    }
+
+    setLobbyMessage(`Lutador escolhido para esta partida: ${fighter.display_name}. O combate SOLO será implementado na próxima etapa.`)
+    setView('lobby')
+  }
+
+  async function cancelQueue() {
+    setQueueLoading(true)
+    const { data, error } = await supabase.rpc('matchmaking_cancel')
+    setQueueLoading(false)
+    if (error) {
+      setQueueError('Não foi possível cancelar a busca. Tente novamente.')
+      return
+    }
+    const result = data as QueueEntry
+    if (result?.status === 'matched' || result?.status === 'in_match') {
+      setQueueEntry(result)
+      return
+    }
+    setQueueEntry(result ?? null)
+    setView('lobby')
+    setLobbyMessage('Busca por adversário cancelada.')
   }
 
   if (!authReady) {
@@ -180,10 +281,55 @@ export default function App() {
   }
 
   if (view === 'select') {
-    return <main className="lobby-screen"><header className="lobby-topbar"><div className="lobby-brand"><span>GTF</span><strong>GENTE TONTA <em>FIGHT</em></strong></div><button className="logout-button" onClick={() => setView('lobby')}>VOLTAR</button></header><section className="selection-content"><span className="eyebrow">MODO {mode}</span><h1>ESCOLHA SEU LUTADOR</h1><p>Escolha qualquer personagem do catálogo para esta partida.</p><div className="character-grid">{catalog.map((fighter,i) => <button key={fighter.id} className={chosen===fighter.id?'character-option selected':'character-option'} onClick={() => setChosen(fighter.id)}><span className="character-number">{String(i+1).padStart(2,'0')}</span><span className="character-art">{fighter.image_url?<img src={fighter.image_url} alt={fighter.display_name}/>:<span className="fighter-silhouette">GTF</span>}</span><strong>{fighter.display_name}</strong><small>{fighter.description}</small>{chosen===fighter.id&&<span className="selected-check">✓ SELECIONADO</span>}</button>)}</div><div className="selection-actions"><button className="logout-button" onClick={() => setView('lobby')}>CANCELAR</button><button className="primary-button selection-confirm" disabled={!chosen} onClick={saveFighter}>CONFIRMAR LUTADOR</button></div></section></main>
+    return (
+      <main className="lobby-screen">
+        <header className="lobby-topbar">
+          <div className="lobby-brand"><span>GTF</span><strong>GENTE TONTA <em>FIGHT</em></strong></div>
+          <button className="logout-button" onClick={() => setView('lobby')}>VOLTAR</button>
+        </header>
+        <section className="selection-content">
+          <span className="eyebrow">MODO {mode}</span>
+          <h1>ESCOLHA SEU LUTADOR</h1>
+          <p>Escolha qualquer personagem do catálogo para esta partida. Seu personagem principal do Lobby não será alterado.</p>
+          <div className="character-grid">
+            {catalog.map((fighter, i) => (
+              <button key={fighter.id} className={chosen === fighter.id ? 'character-option selected' : 'character-option'} onClick={() => setChosen(fighter.id)}>
+                <span className="character-number">{String(i + 1).padStart(2, '0')}</span>
+                <span className="character-art">{fighter.image_url ? <img src={fighter.image_url} alt={fighter.display_name} /> : <span className="fighter-silhouette">GTF</span>}</span>
+                <strong>{fighter.display_name}</strong>
+                <small>{fighter.description}</small>
+                {chosen === fighter.id && <span className="selected-check">✓ SELECIONADO</span>}
+              </button>
+            ))}
+          </div>
+          {queueError && <p className="feedback" role="alert">{queueError}</p>}
+          <div className="selection-actions">
+            <button className="logout-button" onClick={() => setView('lobby')}>CANCELAR</button>
+            <button className="primary-button selection-confirm" disabled={!chosen || queueLoading} onClick={saveFighter}>{queueLoading ? 'CONECTANDO À FILA...' : mode === 'VERSUS' ? 'PROCURAR ADVERSÁRIO' : 'CONFIRMAR LUTADOR'}</button>
+          </div>
+        </section>
+      </main>
+    )
   }
+
   if (view === 'queue') {
-    return <main className="lobby-screen"><section className="searching-card"><div className="search-pulse">VS</div><span className="eyebrow">MODO VERSUS</span><h1>PROCURANDO ADVERSÁRIO</h1><p>Seu lutador foi escolhido. O pareamento automático será ativado na próxima etapa de desenvolvimento.</p><div className="search-status">FILA DE PAREAMENTO AINDA NÃO ATIVADA</div><button className="logout-button" onClick={() => setView('lobby')}>VOLTAR AO LOBBY</button></section></main>
+    const matched = queueEntry?.status === 'matched' || queueEntry?.status === 'in_match'
+    const ended = queueEntry?.status === 'cancelled' || queueEntry?.status === 'expired'
+    return (
+      <main className="lobby-screen">
+        <section className="searching-card">
+          <div className="search-pulse">VS</div>
+          <span className="eyebrow">MODO VERSUS</span>
+          <h1>{matched ? 'ADVERSÁRIO ENCONTRADO!' : ended ? 'BUSCA ENCERRADA' : 'PROCURANDO ADVERSÁRIO'}</h1>
+          <p>{matched ? `${opponentName || 'Outro jogador'} foi encontrado. O pareamento foi concluído.` : ended ? 'Sua busca foi encerrada. Você pode voltar ao Lobby e iniciar outra.' : 'Você está na fila. Assim que outro jogador disponível entrar, o pareamento será automático.'}</p>
+          <div className="search-status">{matched ? `PARTIDA ${queueEntry?.match_id?.slice(0, 8).toUpperCase() ?? 'CONFIRMADA'} · AGUARDANDO ARENA` : ended ? 'SEM PAREAMENTO ATIVO' : 'FILA ATIVA · AGUARDANDO JOGADOR'}</div>
+          {queueError && <p className="feedback" role="alert">{queueError}</p>}
+          {!matched && !ended
+            ? <button className="logout-button" disabled={queueLoading} onClick={cancelQueue}>{queueLoading ? 'CANCELANDO...' : 'CANCELAR BUSCA'}</button>
+            : <button className="logout-button" onClick={() => { setQueueEntry(null); setView('lobby') }}>VOLTAR AO LOBBY</button>}
+        </section>
+      </main>
+    )
   }
 
   return (
@@ -212,7 +358,7 @@ export default function App() {
               <span className="fighter-tag">SEU LUTADOR</span>
             </div>
             <h2>{profile?.character_name ?? 'Lutador sem nome'}</h2>
-            <p className="character-note">Seu personagem será exibido aqui. A personalização e a escolha do lutador entram na próxima fase.</p>
+            <p className="character-note">Este é seu personagem principal. A escolha de cada partida é independente e não altera seu perfil.</p>
             <div className="profile-stats"><div><strong>{ranking.find((entry) => entry.user_id === user.id)?.wins ?? 0}</strong><span>VITÓRIAS</span></div><div><strong>{ranking.find((entry) => entry.user_id === user.id)?.battles_played ?? 0}</strong><span>BATALHAS</span></div></div>
           </article>
 
