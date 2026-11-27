@@ -99,3 +99,39 @@
  .versus-live-layout .own-live-preview{grid-column:1;grid-row:3}
  .versus-live-layout .selection-center .character-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+
+/* GTF - tela de apresentacao pre-batalha */
+.battle-intro-screen{min-height:100vh;position:relative;overflow:hidden;isolation:isolate;padding:18px clamp(16px,4vw,54px) 34px;background:radial-gradient(ellipse at 50% 42%,rgba(65,91,125,.34),transparent 48%),linear-gradient(145deg,#151d2b,#101319 55%,#1d1824);color:#f5f7ff}
+.battle-intro-screen:before,.battle-intro-screen:after{content:"";position:absolute;z-index:-1;width:42vw;height:42vw;border-radius:50%;border:1px solid rgba(217,243,83,.12);box-shadow:0 0 0 28px rgba(217,243,83,.025),0 0 0 58px rgba(255,157,38,.025);top:18%;left:29%}
+.battle-intro-screen:after{width:58vw;height:58vw;top:8%;left:21%;border-color:rgba(255,157,38,.09)}
+.battle-intro-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #ffffff20;padding-bottom:15px}
+.battle-match-id{font-size:10px;font-weight:900;letter-spacing:2px;color:#b6c6df}
+.battle-intro-content{width:min(1120px,100%);margin:clamp(24px,5vh,54px) auto 0;text-align:center}
+.battle-intro-content>h1{margin:9px 0 25px;font-size:clamp(26px,4vw,48px);font-weight:1000;letter-spacing:1px;text-shadow:0 4px 20px #0006}
+.battle-arena-backdrop{min-height:clamp(350px,52vh,560px);position:relative;overflow:hidden;border:1px solid rgba(217,243,83,.36);border-radius:20px;background:linear-gradient(180deg,#080e1938,#080c14c7),radial-gradient(ellipse at 50% 18%,#ffcb664d,transparent 34%),linear-gradient(110deg,#164f72,#286e72 27%,#343a65 53%,#8a472e);box-shadow:0 25px 80px #0006,inset 0 0 80px #0004}
+.battle-arena-backdrop:before{content:"";position:absolute;inset:55% -5% -22%;background:repeating-linear-gradient(0deg,#ffffff14 0 2px,transparent 2px 34px),linear-gradient(#283746,#111820);transform:perspective(420px) rotateX(18deg);transform-origin:top}
+.arena-sunburst{position:absolute;width:360px;height:360px;max-width:60vw;max-height:60vw;border-radius:50%;top:-190px;left:calc(50% - 180px);background:#ffd04a33;filter:blur(2px)}
+.arena-caption{position:absolute;top:22px;left:0;right:0;color:#ffffff88;font-size:10px;font-weight:1000;letter-spacing:5px}
+.battle-fighters{position:absolute;inset:70px 5% 40px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:clamp(8px,3vw,40px)}
+.battle-fighter-card{position:relative;z-index:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.battle-player-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ffe15a;font-size:clamp(11px,1.5vw,16px);font-weight:1000;letter-spacing:2px;text-transform:uppercase}
+.battle-fighter-art{width:clamp(140px,22vw,260px);height:clamp(155px,25vw,290px);display:grid;place-items:center;overflow:hidden;border-radius:18px 18px 8px 8px;background:linear-gradient(145deg,#ffffff33,#040a14a6);border:2px solid #ffffff40;box-shadow:0 15px 38px #0006,0 0 25px #d9f35320;animation:battle-enter .8s cubic-bezier(.2,.8,.2,1) both}
+.battle-fighter-art img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
+.battle-fighter-art strong{font-size:clamp(42px,7vw,78px);font-weight:1000;color:#d9f353;text-shadow:0 0 24px #d9f35380}
+.player-one .battle-fighter-art{border-color:#59c7ffa6}
+.player-two .battle-fighter-art{border-color:#ffa943b3;animation-delay:.15s}
+.battle-fighter-card h2{margin:2px 0 0;font-size:clamp(17px,2vw,25px);font-weight:1000}
+.fighter-side-label{font-size:9px;font-weight:900;letter-spacing:3px;color:#c0cbe0}
+.battle-versus-mark{font-size:clamp(30px,5vw,60px);font-weight:1000;font-style:italic;color:#d9f353;text-shadow:0 0 22px #d9f35380;animation:versus-pulse 1.4s ease-in-out infinite}
+.battle-countdown{position:absolute;z-index:3;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:clamp(92px,12vw,150px);height:clamp(92px,12vw,150px);border-radius:50%;border:4px solid #d9f353;background:#0c131de0;color:#ffe15a;font-size:clamp(48px,7vw,82px);font-weight:1000;text-shadow:0 0 24px #ffe15a8c;box-shadow:0 0 0 12px #d9f3531a,0 0 55px #d9f35347;animation:count-pop .9s ease both}
+.battle-countdown.fight-now{width:auto;height:auto;padding:14px 30px;border-radius:14px;color:#fff;background:linear-gradient(135deg,#ffdf4f,#ff8d26);border:3px solid #fff2a6;font-size:clamp(40px,7vw,76px);font-style:italic;text-shadow:0 3px 0 #a84917,0 0 25px #ffffff99;box-shadow:0 0 0 10px #ffae3129,0 0 75px #ff9d2699;animation:fight-impact .65s cubic-bezier(.15,.8,.2,1) both}
+.battle-intro-footer{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 10px}
+.battle-intro-footer>span{color:#d9f353;font-size:10px;font-weight:1000;letter-spacing:2px}
+.battle-intro-footer p{margin:0 0 5px;color:#aebed5;font-size:12px}
+@keyframes battle-enter{from{opacity:0;transform:translateY(40px) scale(.82)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes versus-pulse{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.13);filter:brightness(1.4)}}
+@keyframes count-pop{from{opacity:0;transform:translate(-50%,-50%) scale(1.5)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes fight-impact{0%{opacity:0;transform:translate(-50%,-50%) scale(2.4) rotate(-8deg)}70%{opacity:1;transform:translate(-50%,-50%) scale(.9) rotate(2deg)}100%{transform:translate(-50%,-50%) scale(1) rotate(0)}}
+@media(max-width:620px){.battle-intro-screen{padding:14px}.battle-arena-backdrop{min-height:430px}.battle-fighters{inset:70px 10px 35px;gap:4px}.battle-fighter-art{width:clamp(100px,34vw,170px);height:clamp(145px,42vw,205px)}.battle-countdown{top:52%;width:82px;height:82px;font-size:44px}.battle-countdown.fight-now{width:auto;height:auto;padding:12px 20px;font-size:38px}.battle-fighter-card h2{font-size:15px}}
+@media(prefers-reduced-motion:reduce){.battle-fighter-art,.battle-versus-mark,.battle-countdown{animation:none}}
