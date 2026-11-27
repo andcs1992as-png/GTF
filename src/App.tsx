@@ -45,7 +45,8 @@ export default function App() {
   const [catalog, setCatalog] = useState<Fighter[]>([])
   const [chosen, setChosen] = useState('')
   const [mode, setMode] = useState<'SOLO' | 'VERSUS' | null>(null)
-  const [view, setView] = useState<'lobby' | 'select' | 'queue'>('lobby')
+  const [view, setView] = useState<'lobby' | 'select' | 'queue' | 'intro'>('lobby')
+  const [countdown, setCountdown] = useState(3)
   const [queueEntry, setQueueEntry] = useState<QueueEntry | null>(null)
   const [queueLoading, setQueueLoading] = useState(false)
   const [queueError, setQueueError] = useState('')
@@ -125,6 +126,18 @@ export default function App() {
   }, [user, profile?.username])
 
   useEffect(() => {
+    if (view !== 'intro') return
+    if (countdown > 0) {
+      const timer = window.setTimeout(() => setCountdown((value) => value - 1), 1000)
+      return () => window.clearTimeout(timer)
+    }
+    if (countdown === 0) {
+      const timer = window.setTimeout(() => setCountdown(-1), 900)
+      return () => window.clearTimeout(timer)
+    }
+  }, [view, countdown])
+
+  useEffect(() => {
     if (!user || !queueEntry?.id || !['queue', 'select'].includes(view) || mode !== 'VERSUS') return
     let active = true
 
@@ -137,7 +150,7 @@ export default function App() {
         setChosen('')
         setView('select')
       }
-      if (entry.status === 'in_match') setView('queue')
+      if (entry.status === 'in_match') { setCountdown(3); setView('intro') }
       if (entry.status === 'cancelled' || entry.status === 'expired') setView('queue')
     }
 
@@ -246,7 +259,7 @@ export default function App() {
       }
       const result = data as QueueEntry
       setQueueEntry(result)
-      if (result.status === 'in_match') setView('queue')
+      if (result.status === 'in_match') { setCountdown(3); setView('intro') }
       return
     }
 
@@ -362,6 +375,54 @@ export default function App() {
           <div className="selection-actions">
             <button className="logout-button" onClick={() => setView('lobby')}>CANCELAR</button>
             <button className="primary-button selection-confirm" disabled={!chosen || queueLoading || (versusMatched && !!queueEntry?.character_id)} onClick={saveFighter}>{queueLoading ? 'CONFIRMANDO...' : versusMatched && queueEntry?.character_id ? 'LUTADOR CONFIRMADO' : 'CONFIRMAR LUTADOR'}</button>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (view === 'intro') {
+    const ownFighter = catalog.find((fighter) => fighter.id === queueEntry?.character_id)
+    const rivalFighter = catalog.find((fighter) => fighter.id === queueEntry?.opponent_character_id)
+    return (
+      <main className="battle-intro-screen">
+        <div className="battle-intro-topbar">
+          <div className="lobby-brand"><span>GTF</span><strong>GENTE TONTA <em>FIGHT</em></strong></div>
+          <span className="battle-match-id">PARTIDA {queueEntry?.match_id?.slice(0, 8).toUpperCase()}</span>
+        </div>
+        <section className="battle-intro-content">
+          <span className="eyebrow">MODO VERSUS · APRESENTAÇÃO</span>
+          <h1>PREPARE-SE PARA A BATALHA!</h1>
+          <div className="battle-arena-backdrop">
+            <div className="arena-sunburst" />
+            <span className="arena-caption">ARENA GTF</span>
+            <div className="battle-fighters">
+              <article className="battle-fighter-card player-one">
+                <span className="battle-player-name">{profile?.username ?? 'VOCÊ'}</span>
+                <div className="battle-fighter-art">
+                  {ownFighter?.image_url ? <img src={ownFighter.image_url} alt={ownFighter.display_name} /> : <strong>GTF</strong>}
+                </div>
+                <h2>{ownFighter?.display_name ?? 'LUTADOR'}</h2>
+                <span className="fighter-side-label">JOGADOR 1</span>
+              </article>
+              <div className="battle-versus-mark">VS</div>
+              <article className="battle-fighter-card player-two">
+                <span className="battle-player-name">{opponentName || 'ADVERSÁRIO'}</span>
+                <div className="battle-fighter-art">
+                  {rivalFighter?.image_url ? <img src={rivalFighter.image_url} alt={rivalFighter.display_name} /> : <strong>GTF</strong>}
+                </div>
+                <h2>{rivalFighter?.display_name ?? 'LUTADOR'}</h2>
+                <span className="fighter-side-label">JOGADOR 2</span>
+              </article>
+            </div>
+            <div className={countdown === -1 ? 'battle-countdown fight-now' : 'battle-countdown'}>
+              {countdown === -1 ? 'FIGHT!' : countdown === 0 ? 'PREPARE-SE!' : countdown}
+            </div>
+          </div>
+          <div className="battle-intro-footer">
+            <span>AMBOS OS JOGADORES CONFIRMADOS</span>
+            <p>Os lutadores estão prontos. A arena e o combate serão habilitados na próxima etapa de desenvolvimento.</p>
+            <button className="logout-button" onClick={() => { setQueueEntry(null); setView('lobby') }}>VOLTAR AO LOBBY</button>
           </div>
         </section>
       </main>
