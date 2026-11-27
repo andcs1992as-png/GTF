@@ -8,6 +8,7 @@ type Profile = {
   username: string
   character_name: string
   character_image_url: string | null
+  selected_character_id?: string | null
 }
 type RankingEntry = {
   user_id: string
@@ -30,6 +31,10 @@ export default function App() {
   const [onlineCount, setOnlineCount] = useState(0)
   const [lobbyMessage, setLobbyMessage] = useState('')
   const [rankingLoading, setRankingLoading] = useState(false)
+  const [catalog, setCatalog] = useState<{id:string;display_name:string;description:string;image_url:string|null}[]>([])
+  const [chosen, setChosen] = useState('')
+  const [mode, setMode] = useState<'SOLO'|'VERSUS'|null>(null)
+  const [view, setView] = useState<'lobby'|'select'|'queue'>('lobby')
 
   useEffect(() => {
     let alive = true
@@ -50,7 +55,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!user) {
+  
+  if (view === 'select') return <main className="lobby-screen"><header className="lobby-topbar"><div className="lobby-brand"><span>GTF</span><strong>GENTE TONTA <em>FIGHT</em></strong></div><button className="logout-button" onClick={() => setView('lobby')}>VOLTAR</button></header><section className="selection-content"><span className="eyebrow">MODO {mode}</span><h1>ESCOLHA SEU LUTADOR</h1><p>Escolha qualquer personagem do catálogo para esta partida.</p><div className="character-grid">{catalog.map((fighter,i) => <button key={fighter.id} className={chosen===fighter.id?'character-option selected':'character-option'} onClick={() => setChosen(fighter.id)}><span className="character-number">{String(i+1).padStart(2,'0')}</span><span className="character-art">{fighter.image_url?<img src={fighter.image_url} alt={fighter.display_name}/>:<span className="fighter-silhouette">GTF</span>}</span><strong>{fighter.display_name}</strong><small>{fighter.description}</small>{chosen===fighter.id&&<span className="selected-check">✓ SELECIONADO</span>}</button>)}</div><div className="selection-actions"><button className="logout-button" onClick={() => setView('lobby')}>CANCELAR</button><button className="primary-button selection-confirm" disabled={!chosen} onClick={saveFighter}>CONFIRMAR LUTADOR</button></div></section></main>;
+  if (view === 'queue') return <main className="lobby-screen"><section className="searching-card"><div className="search-pulse">VS</div><span className="eyebrow">MODO VERSUS</span><h1>PROCURANDO ADVERSÁRIO</h1><p>Seu lutador foi escolhido. O pareamento automático será ativado na próxima etapa de desenvolvimento.</p><div className="search-status">FILA DE PAREAMENTO AINDA NÃO ATIVADA</div><button className="logout-button" onClick={() => setView('lobby')}>VOLTAR AO LOBBY</button></section></main>;
+
+  if (!user) {
       setProfile(null)
       setRanking([])
       setOnlineCount(0)
@@ -60,13 +69,15 @@ export default function App() {
     let active = true
     async function loadLobby() {
       setRankingLoading(true)
-      const [{ data: profileData }, { data: profilesData }, { data: statsData }] = await Promise.all([
+      const [{ data: profileData }, { data: profilesData }, { data: statsData }, { data: fighters }] = await Promise.all([
         supabase.from('player_profiles').select('user_id, username, character_name, character_image_url').eq('user_id', user!.id).maybeSingle(),
         supabase.from('player_profiles').select('user_id, username, character_name'),
         supabase.from('player_stats').select('user_id, wins, losses, battles_played'),
+        supabase.from('character_catalog').select('id,display_name,description,image_url').order('sort_order'),
       ])
       if (!active) return
-      if (profileData) setProfile(profileData as Profile)
+      if (profileData) { setProfile(profileData as Profile); setChosen(profileData.selected_character_id ?? '') }
+      setCatalog(fighters ?? [])
       const statsByUser = new Map((statsData ?? []).map((stat) => [stat.user_id, stat]))
       const combined = (profilesData ?? []).map((player) => ({
         ...player,
@@ -131,6 +142,17 @@ export default function App() {
     } else {
       setLobbyMessage('O modo VERSUS está planejado. O Lobby já acompanha jogadores conectados; o pareamento e as batalhas online serão implementados na próxima etapa.')
     }
+  }
+
+  async function saveFighter() {
+    if (!user || !chosen) return;
+    const fighter = catalog.find((item) => item.id === chosen);
+    if (!fighter) return;
+    const { error } = await supabase.from('player_profiles').update({selected_character_id:fighter.id,character_name:fighter.display_name,character_image_url:fighter.image_url}).eq('user_id',user.id);
+    if (error) { setLobbyMessage('Não foi possível salvar o lutador.'); setView('lobby'); return; }
+    setProfile((p) => p ? {...p,selected_character_id:fighter.id,character_name:fighter.display_name,character_image_url:fighter.image_url} : p);
+    setView(mode === 'VERSUS' ? 'queue' : 'lobby');
+    setLobbyMessage(mode === 'SOLO' ? 'Lutador selecionado. O combate SOLO será implementado na próxima etapa.' : '');
   }
 
   if (!authReady) {
