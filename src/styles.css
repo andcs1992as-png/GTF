@@ -50,3 +50,10 @@
 .feedback{color:#fff3bf;background:rgba(255,181,42,.16);border-left-color:#ffbd35}
 .login-card footer{color:#d3e3f8}
 @media(max-width:560px){.login-screen{padding:16px;background-position:center}.login-card{padding:30px 24px}}
+
+
+/* Ajuste fino do login: fundo mais claro, sem alterar dimensoes do cartao */
+.login-screen{background-image:linear-gradient(90deg,rgba(5,18,45,.12),rgba(5,18,45,.04) 48%,rgba(5,18,45,.12)),linear-gradient(0deg,rgba(4,14,35,.08),rgba(4,14,35,0)),url('/images/login-gtf.jpg.jfif')}
+.login-card{background:rgba(9,24,48,.88)}
+.login-card .heading{margin-bottom:22px}
+.login-card .heading h1{margin:0}
