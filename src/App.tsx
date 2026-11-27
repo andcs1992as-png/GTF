@@ -215,7 +215,7 @@ export default function App() {
     setLobbyMessage('')
     if (nextMode === 'VERSUS') {
       setQueueLoading(true)
-      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: null })
+      const { data, error } = await supabase.rpc('matchmaking_start_new')
       setQueueLoading(false)
       if (error) {
         setQueueError('Não foi possível iniciar a busca por adversário. Tente novamente.')
