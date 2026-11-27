@@ -169,7 +169,7 @@ export default function App() {
   }, [user, view, queueEntry?.id, chosen])
 
   useEffect(() => {
-    if (!queueEntry?.opponent_id || queueEntry.status !== 'matched') {
+    if (!queueEntry?.opponent_id || !['matched', 'in_match'].includes(queueEntry.status)) {
       setOpponentName('')
       return
     }
