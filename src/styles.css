@@ -57,3 +57,45 @@
 .login-card{background:rgba(9,24,48,.88)}
 .login-card .heading{margin-bottom:22px}
 .login-card .heading h1{margin:0}
+
+
+/* VERSUS: os dois lutadores ficam visiveis em tempo real, um de cada lado */
+.selection-layout.versus-live-layout{
+  grid-template-columns:minmax(190px,235px) minmax(420px,1fr) minmax(190px,235px);
+  gap:14px;
+  align-items:stretch;
+}
+.versus-live-layout .selection-center{grid-column:2;grid-row:1}
+.versus-live-layout .opponent-live-preview{grid-column:1;grid-row:1}
+.versus-live-layout .own-live-preview{grid-column:3;grid-row:1}
+.versus-live-layout .selection-preview{min-height:100%;padding:18px 14px}
+.versus-live-layout .preview-art{height:clamp(170px,20vw,260px);margin:10px 0}
+.versus-live-layout .preview-placeholder span{font-size:52px}
+.versus-live-layout .selection-center .character-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.versus-live-layout .selection-center .character-art{height:clamp(75px,8vw,108px)}
+.versus-live-layout .character-option:disabled{cursor:not-allowed;opacity:.78}
+.versus-live-layout .preview-status .is-confirmed{background:#8ee58a;box-shadow:0 0 9px #8ee58a}
+.versus-live-layout .preview-status span.is-confirmed{background:#8ee58a}
+.versus-live-layout .selection-preview h2{font-size:clamp(15px,1.2vw,20px)}
+.versus-live-layout .selection-preview>p{font-size:10px}
+@media(max-width:1050px){
+ .selection-layout.versus-live-layout{grid-template-columns:minmax(150px,1fr) minmax(320px,2fr) minmax(150px,1fr);gap:9px}
+ .versus-live-layout .selection-center{padding:10px}
+ .versus-live-layout .selection-preview{padding:14px 9px}
+ .versus-live-layout .selection-center .character-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+ .selection-layout.versus-live-layout{grid-template-columns:1fr 1fr}
+ .versus-live-layout .selection-center{grid-column:1/-1;grid-row:1}
+ .versus-live-layout .opponent-live-preview{grid-column:1;grid-row:2}
+ .versus-live-layout .own-live-preview{grid-column:2;grid-row:2}
+ .versus-live-layout .selection-preview{min-height:260px}
+ .versus-live-layout .preview-art{height:150px}
+}
+@media(max-width:480px){
+ .selection-layout.versus-live-layout{grid-template-columns:1fr}
+ .versus-live-layout .selection-center{grid-column:1;grid-row:1}
+ .versus-live-layout .opponent-live-preview{grid-column:1;grid-row:2}
+ .versus-live-layout .own-live-preview{grid-column:1;grid-row:3}
+ .versus-live-layout .selection-center .character-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
