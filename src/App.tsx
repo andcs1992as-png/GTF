@@ -24,6 +24,9 @@ type QueueEntry = {
   status: 'waiting' | 'matched' | 'in_match' | 'cancelled' | 'expired'
   opponent_id: string | null
   match_id: string | null
+  character_id?: string | null
+  opponent_character_id?: string | null
+  opponent_selected?: boolean
 }
 
 export default function App() {
@@ -127,11 +130,16 @@ export default function App() {
     const refreshQueue = async () => {
       const { data, error } = await supabase
         .from('matchmaking_queue')
-        .select('id,status,opponent_id,match_id')
+        .select('id,status,opponent_id,match_id,character_id')
         .eq('id', queueEntry.id)
         .maybeSingle()
       if (!active || error || !data) return
-      setQueueEntry(data as QueueEntry)
+      const entry = data as QueueEntry
+      setQueueEntry(entry)
+      if (entry.status === 'matched' && !entry.character_id && view === 'queue') {
+        setChosen('')
+        setView('select')
+      }
     }
 
     const channel = supabase
@@ -146,7 +154,7 @@ export default function App() {
 
     const poll = window.setInterval(() => { void refreshQueue() }, 5000)
     const heartbeat = window.setInterval(async () => {
-      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: chosen })
+      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: null })
       if (!active || error || !data) return
       setQueueEntry(data as QueueEntry)
     }, 30000)
@@ -199,12 +207,25 @@ export default function App() {
     setQueueEntry(null)
   }
 
-  function chooseMode(nextMode: 'SOLO' | 'VERSUS') {
+  async function chooseMode(nextMode: 'SOLO' | 'VERSUS') {
     setMode(nextMode)
-    setChosen(profile?.selected_character_id ?? catalog[0]?.id ?? '')
+    setChosen(nextMode === 'SOLO' ? (profile?.selected_character_id ?? catalog[0]?.id ?? '') : '')
     setQueueEntry(null)
     setQueueError('')
     setLobbyMessage('')
+    if (nextMode === 'VERSUS') {
+      setQueueLoading(true)
+      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: null })
+      setQueueLoading(false)
+      if (error) {
+        setQueueError('Não foi possível iniciar a busca por adversário. Tente novamente.')
+        setView('lobby')
+        return
+      }
+      setQueueEntry(data as QueueEntry)
+      setView((data as QueueEntry).status === 'matched' ? 'select' : 'queue')
+      return
+    }
     setView('select')
   }
 
@@ -214,12 +235,13 @@ export default function App() {
     if (!fighter) return
 
     if (mode === 'VERSUS') {
+      if (!queueEntry || queueEntry.status !== 'matched') return
       setQueueLoading(true)
       setQueueError('')
-      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: chosen })
+      const { data, error } = await supabase.rpc('matchmaking_choose_character', { p_character_id: chosen })
       setQueueLoading(false)
       if (error) {
-        setQueueError('Não foi possível entrar na fila agora. Tente novamente.')
+        setQueueError('Não foi possível confirmar seu personagem. Tente novamente.')
         return
       }
       setQueueEntry(data as QueueEntry)
@@ -281,6 +303,7 @@ export default function App() {
   }
 
   if (view === 'select') {
+    const versusMatched = mode === 'VERSUS' && queueEntry?.status === 'matched'
     const selectedFighter = catalog.find((fighter) => fighter.id === chosen)
 
     return (
@@ -293,7 +316,7 @@ export default function App() {
           <div className="selection-heading">
             <span className="eyebrow">MODO {mode}</span>
             <h1>ESCOLHA SEU LUTADOR</h1>
-            <p>Selecione um personagem no centro. A prévia ao lado muda imediatamente; seu personagem principal do Lobby não será alterado.</p>
+            <p>{versusMatched ? `Adversário encontrado: ${opponentName || 'jogador conectado'}. Agora cada um escolhe seu próprio lutador.` : 'Selecione um personagem no centro. A prévia ao lado muda imediatamente; seu personagem principal do Lobby não será alterado.'}</p>
           </div>
 
           <div className="selection-layout">
@@ -325,10 +348,11 @@ export default function App() {
             </aside>
           </div>
 
+          {versusMatched && <p className="selection-match-note"><strong>VS {opponentName || 'ADVERSÁRIO'}</strong> · A escolha é individual e simultânea.</p>}
           {queueError && <p className="feedback" role="alert">{queueError}</p>}
           <div className="selection-actions">
             <button className="logout-button" onClick={() => setView('lobby')}>CANCELAR</button>
-            <button className="primary-button selection-confirm" disabled={!chosen || queueLoading} onClick={saveFighter}>{queueLoading ? 'CONECTANDO À FILA...' : mode === 'VERSUS' ? 'PROCURAR ADVERSÁRIO' : 'CONFIRMAR LUTADOR'}</button>
+            <button className="primary-button selection-confirm" disabled={!chosen || queueLoading} onClick={saveFighter}>{queueLoading ? 'CONFIRMANDO...' : mode === 'VERSUS' ? 'CONFIRMAR LUTADOR' : 'CONFIRMAR LUTADOR'}</button>
           </div>
         </section>
       </main>
@@ -337,19 +361,20 @@ export default function App() {
 
   if (view === 'queue') {
     const matched = queueEntry?.status === 'matched' || queueEntry?.status === 'in_match'
+    const bothSelected = queueEntry?.status === 'in_match'
     const ended = queueEntry?.status === 'cancelled' || queueEntry?.status === 'expired'
     return (
       <main className="lobby-screen">
         <section className="searching-card">
           <div className="search-pulse">VS</div>
           <span className="eyebrow">MODO VERSUS</span>
-          <h1>{matched ? 'ADVERSÁRIO ENCONTRADO!' : ended ? 'BUSCA ENCERRADA' : 'PROCURANDO ADVERSÁRIO'}</h1>
-          <p>{matched ? `${opponentName || 'Outro jogador'} foi encontrado. O pareamento foi concluído.` : ended ? 'Sua busca foi encerrada. Você pode voltar ao Lobby e iniciar outra.' : 'Você está na fila. Assim que outro jogador disponível entrar, o pareamento será automático.'}</p>
-          <div className="search-status">{matched ? `PARTIDA ${queueEntry?.match_id?.slice(0, 8).toUpperCase() ?? 'CONFIRMADA'} · AGUARDANDO ARENA` : ended ? 'SEM PAREAMENTO ATIVO' : 'FILA ATIVA · AGUARDANDO JOGADOR'}</div>
+          <h1>{bothSelected ? 'PERSONAGENS CONFIRMADOS!' : matched ? 'AGUARDANDO SELEÇÃO' : ended ? 'BUSCA ENCERRADA' : 'PROCURANDO ADVERSÁRIO'}</h1>
+          <p>{bothSelected ? `Você e ${opponentName || 'seu adversário'} escolheram seus lutadores. A partida está pronta para a próxima etapa.` : matched ? `${opponentName || 'Adversário encontrado'} já está pareado com você. Sua escolha foi registrada; aguardando o personagem do outro jogador.` : ended ? 'Sua busca foi encerrada. Você pode voltar ao Lobby e iniciar outra.' : 'Você está na fila. Assim que outro jogador disponível entrar, o pareamento será automático.'}</p>
+          <div className="search-status">{matched ? `PARTIDA ${queueEntry?.match_id?.slice(0, 8).toUpperCase() ?? 'CONFIRMADA'} · ${bothSelected ? 'AMBOS PRONTOS' : 'ESCOLHA DE PERSONAGENS'}` : ended ? 'SEM PAREAMENTO ATIVO' : 'FILA ATIVA · AGUARDANDO JOGADOR'}</div>
           {queueError && <p className="feedback" role="alert">{queueError}</p>}
           {!matched && !ended
             ? <button className="logout-button" disabled={queueLoading} onClick={cancelQueue}>{queueLoading ? 'CANCELANDO...' : 'CANCELAR BUSCA'}</button>
-            : <button className="logout-button" onClick={() => { setQueueEntry(null); setView('lobby') }}>VOLTAR AO LOBBY</button>}
+            : bothSelected ? <button className="logout-button" onClick={() => { setQueueEntry(null); setView('lobby') }}>VOLTAR AO LOBBY</button> : <span className="search-status">AGUARDANDO O OUTRO JOGADOR...</span>}
         </section>
       </main>
     )
