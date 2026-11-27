@@ -284,9 +284,7 @@ export default function App() {
             <p>GENTE TONTA <strong>FIGHT</strong></p>
           </header>
           <div className="heading">
-            <span className="eyebrow">ÁREA DO JOGADOR</span>
             <h1>ENTRAR NO JOGO</h1>
-            <p>Use seu e-mail e sua senha para continuar.</p>
           </div>
           <form className="login-form" onSubmit={handleSubmit}>
             <label htmlFor="email">E-MAIL</label>
@@ -296,7 +294,6 @@ export default function App() {
             <button className="primary-button" type="submit" disabled={loading}>{loading ? 'VERIFICANDO...' : 'ENTRAR'}</button>
             {message && <p className="feedback" role="status">{message}</p>}
           </form>
-          <footer>GTF © 2026 · UM JOGO ENTRE AMIGOS</footer>
         </section>
       </main>
     )
