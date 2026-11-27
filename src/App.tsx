@@ -25,6 +25,7 @@ type QueueEntry = {
   opponent_id: string | null
   match_id: string | null
   character_id?: string | null
+  preview_character_id?: string | null
   opponent_character_id?: string | null
   opponent_selected?: boolean
 }
@@ -219,6 +220,15 @@ export default function App() {
     setView('select')
   }
 
+  async function previewFighter(characterId: string) {
+    setChosen(characterId)
+    if (mode !== 'VERSUS' || queueEntry?.status !== 'matched' || queueEntry.character_id) return
+    const { error } = await supabase.rpc('matchmaking_preview_character', { p_character_id: characterId })
+    if (error) setQueueError('Não foi possível atualizar a prévia para seu adversário.')
+    else setQueueError('')
+    setQueueEntry((current) => current ? { ...current, preview_character_id: characterId } : current)
+  }
+
   async function saveFighter() {
     if (!chosen) return
     const fighter = catalog.find((item) => item.id === chosen)
@@ -323,7 +333,7 @@ export default function App() {
               <div className="selection-grid-label"><span>SELEÇÃO DE PERSONAGENS</span><small>{catalog.length} LUTADORES DISPONÍVEIS</small></div>
               <div className="character-grid">
                 {catalog.map((fighter, i) => (
-                  <button key={fighter.id} className={chosen === fighter.id ? 'character-option selected' : 'character-option'} onClick={() => setChosen(fighter.id)} aria-pressed={chosen === fighter.id} disabled={versusMatched && !!queueEntry?.character_id}>
+                  <button key={fighter.id} className={chosen === fighter.id ? 'character-option selected' : 'character-option'} onClick={() => { void previewFighter(fighter.id) }} aria-pressed={chosen === fighter.id} disabled={versusMatched && !!queueEntry?.character_id}>
                     <span className="character-number">{String(i + 1).padStart(2, '0')}</span>
                     <span className="character-art">{fighter.image_url ? <img src={fighter.image_url} alt={fighter.display_name} /> : <span className="fighter-silhouette">GTF</span>}</span>
                     <strong>{fighter.display_name}</strong>
