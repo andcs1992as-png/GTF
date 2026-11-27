@@ -281,6 +281,8 @@ export default function App() {
   }
 
   if (view === 'select') {
+    const selectedFighter = catalog.find((fighter) => fighter.id === chosen)
+
     return (
       <main className="lobby-screen">
         <header className="lobby-topbar">
@@ -288,20 +290,41 @@ export default function App() {
           <button className="logout-button" onClick={() => setView('lobby')}>VOLTAR</button>
         </header>
         <section className="selection-content">
-          <span className="eyebrow">MODO {mode}</span>
-          <h1>ESCOLHA SEU LUTADOR</h1>
-          <p>Escolha qualquer personagem do catálogo para esta partida. Seu personagem principal do Lobby não será alterado.</p>
-          <div className="character-grid">
-            {catalog.map((fighter, i) => (
-              <button key={fighter.id} className={chosen === fighter.id ? 'character-option selected' : 'character-option'} onClick={() => setChosen(fighter.id)}>
-                <span className="character-number">{String(i + 1).padStart(2, '0')}</span>
-                <span className="character-art">{fighter.image_url ? <img src={fighter.image_url} alt={fighter.display_name} /> : <span className="fighter-silhouette">GTF</span>}</span>
-                <strong>{fighter.display_name}</strong>
-                <small>{fighter.description}</small>
-                {chosen === fighter.id && <span className="selected-check">✓ SELECIONADO</span>}
-              </button>
-            ))}
+          <div className="selection-heading">
+            <span className="eyebrow">MODO {mode}</span>
+            <h1>ESCOLHA SEU LUTADOR</h1>
+            <p>Selecione um personagem no centro. A prévia ao lado muda imediatamente; seu personagem principal do Lobby não será alterado.</p>
           </div>
+
+          <div className="selection-layout">
+            <div className="selection-center">
+              <div className="selection-grid-label"><span>SELEÇÃO DE PERSONAGENS</span><small>{catalog.length} LUTADORES DISPONÍVEIS</small></div>
+              <div className="character-grid">
+                {catalog.map((fighter, i) => (
+                  <button key={fighter.id} className={chosen === fighter.id ? 'character-option selected' : 'character-option'} onClick={() => setChosen(fighter.id)} aria-pressed={chosen === fighter.id}>
+                    <span className="character-number">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="character-art">{fighter.image_url ? <img src={fighter.image_url} alt={fighter.display_name} /> : <span className="fighter-silhouette">GTF</span>}</span>
+                    <strong>{fighter.display_name}</strong>
+                    {chosen === fighter.id && <span className="selected-check">✓ SELECIONADO</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <aside className="selection-preview">
+              <span className="preview-kicker">SUA ESCOLHA</span>
+              <div className="preview-art">
+                {selectedFighter?.image_url
+                  ? <img src={selectedFighter.image_url} alt={selectedFighter.display_name} />
+                  : <div className="preview-placeholder"><span>GTF</span><small>PERSONAGEM</small></div>}
+              </div>
+              <span className="preview-label">LUTADOR SELECIONADO</span>
+              <h2>{selectedFighter?.display_name ?? 'Selecione um lutador'}</h2>
+              <p>{selectedFighter?.description ?? 'Escolha um personagem na grade ao lado para visualizar sua seleção.'}</p>
+              <div className="preview-status"><span /> PRONTO PARA A BATALHA</div>
+            </aside>
+          </div>
+
           {queueError && <p className="feedback" role="alert">{queueError}</p>}
           <div className="selection-actions">
             <button className="logout-button" onClick={() => setView('lobby')}>CANCELAR</button>
