@@ -124,50 +124,40 @@ export default function App() {
   }, [user, profile?.username])
 
   useEffect(() => {
-    if (!user || view !== 'queue' || !queueEntry?.id) return
+    if (!user || !queueEntry?.id || !['queue', 'select'].includes(view) || mode !== 'VERSUS') return
     let active = true
 
     const refreshQueue = async () => {
-      const { data, error } = await supabase
-        .from('matchmaking_queue')
-        .select('id,status,opponent_id,match_id,character_id')
-        .eq('id', queueEntry.id)
-        .maybeSingle()
-      if (!active || error || !data) return
+      const { data, error } = await supabase.rpc('matchmaking_get_state')
+      if (!active || error || !data || data.status === 'none') return
       const entry = data as QueueEntry
       setQueueEntry(entry)
       if (entry.status === 'matched' && !entry.character_id && view === 'queue') {
         setChosen('')
         setView('select')
       }
+      if (entry.status === 'in_match') setView('queue')
+      if (entry.status === 'cancelled' || entry.status === 'expired') setView('queue')
     }
 
     const channel = supabase
-      .channel(`gtf-matchmaking-${queueEntry.id}`)
+      .channel(`gtf-matchmaking-live-${queueEntry.id}`)
       .on('postgres_changes', {
-        event: 'UPDATE',
+        event: '*',
         schema: 'public',
         table: 'matchmaking_queue',
         filter: `player_id=eq.${user.id}`,
       }, () => { void refreshQueue() })
       .subscribe()
 
-    const poll = window.setInterval(() => { void refreshQueue() }, 5000)
-    const heartbeat = window.setInterval(async () => {
-      const { data, error } = await supabase.rpc('matchmaking_enter', { p_character_id: null })
-      if (!active || error || !data) return
-      setQueueEntry(data as QueueEntry)
-    }, 30000)
-
+    const poll = window.setInterval(() => { void refreshQueue() }, 1000)
     void refreshQueue()
     return () => {
       active = false
       window.clearInterval(poll)
-      window.clearInterval(heartbeat)
       void supabase.removeChannel(channel)
     }
-  }, [user, view, queueEntry?.id, chosen])
-
+  }, [user, view, mode, queueEntry?.id])
   useEffect(() => {
     if (!queueEntry?.opponent_id || !['matched', 'in_match'].includes(queueEntry.status)) {
       setOpponentName('')
@@ -244,8 +234,9 @@ export default function App() {
         setQueueError('Não foi possível confirmar seu personagem. Tente novamente.')
         return
       }
-      setQueueEntry(data as QueueEntry)
-      setView('queue')
+      const result = data as QueueEntry
+      setQueueEntry(result)
+      if (result.status === 'in_match') setView('queue')
       return
     }
 
@@ -302,6 +293,9 @@ export default function App() {
   if (view === 'select') {
     const versusMatched = mode === 'VERSUS' && queueEntry?.status === 'matched'
     const selectedFighter = catalog.find((fighter) => fighter.id === chosen)
+    const opponentFighter = catalog.find((fighter) => fighter.id === queueEntry?.opponent_character_id)
+    const myConfirmedFighter = catalog.find((fighter) => fighter.id === queueEntry?.character_id)
+    const myFighterPreview = myConfirmedFighter ?? selectedFighter
 
     return (
       <main className="lobby-screen">
@@ -316,12 +310,20 @@ export default function App() {
             <p>{versusMatched ? `Adversário encontrado: ${opponentName || 'jogador conectado'}. Agora cada um escolhe seu próprio lutador.` : 'Selecione um personagem no centro. A prévia ao lado muda imediatamente; seu personagem principal do Lobby não será alterado.'}</p>
           </div>
 
-          <div className="selection-layout">
+          <div className={versusMatched ? 'selection-layout versus-live-layout' : 'selection-layout'}>
+            {versusMatched && <aside className="selection-preview opponent-live-preview">
+              <span className="preview-kicker">{opponentName || 'ADVERSÁRIO'}</span>
+              <div className="preview-art">{opponentFighter?.image_url ? <img src={opponentFighter.image_url} alt={opponentFighter.display_name} /> : <div className="preview-placeholder"><span>{opponentFighter ? 'GTF' : 'VS'}</span><small>{opponentFighter ? 'PERSONAGEM' : 'ESCOLHENDO...'}</small></div>}</div>
+              <span className="preview-label">{queueEntry?.opponent_selected ? 'LUTADOR CONFIRMADO' : opponentFighter ? 'ESCOLHA ATUAL' : 'AGUARDANDO ESCOLHA'}</span>
+              <h2>{opponentFighter?.display_name ?? 'Aguardando...'}</h2>
+              <p>{opponentFighter?.description ?? 'O personagem aparecerá aqui assim que seu adversário fizer uma escolha.'}</p>
+              <div className="preview-status"><span className={queueEntry?.opponent_selected ? 'is-confirmed' : ''} /> {queueEntry?.opponent_selected ? 'CONFIRMADO' : 'AO VIVO'}</div>
+            </aside>}
             <div className="selection-center">
               <div className="selection-grid-label"><span>SELEÇÃO DE PERSONAGENS</span><small>{catalog.length} LUTADORES DISPONÍVEIS</small></div>
               <div className="character-grid">
                 {catalog.map((fighter, i) => (
-                  <button key={fighter.id} className={chosen === fighter.id ? 'character-option selected' : 'character-option'} onClick={() => setChosen(fighter.id)} aria-pressed={chosen === fighter.id}>
+                  <button key={fighter.id} className={chosen === fighter.id ? 'character-option selected' : 'character-option'} onClick={() => setChosen(fighter.id)} aria-pressed={chosen === fighter.id} disabled={versusMatched && !!queueEntry?.character_id}>
                     <span className="character-number">{String(i + 1).padStart(2, '0')}</span>
                     <span className="character-art">{fighter.image_url ? <img src={fighter.image_url} alt={fighter.display_name} /> : <span className="fighter-silhouette">GTF</span>}</span>
                     <strong>{fighter.display_name}</strong>
@@ -331,25 +333,25 @@ export default function App() {
               </div>
             </div>
 
-            <aside className="selection-preview">
+            <aside className="selection-preview own-live-preview">
               <span className="preview-kicker">SUA ESCOLHA</span>
               <div className="preview-art">
-                {selectedFighter?.image_url
-                  ? <img src={selectedFighter.image_url} alt={selectedFighter.display_name} />
-                  : <div className="preview-placeholder"><span>GTF</span><small>PERSONAGEM</small></div>}
+                {myFighterPreview?.image_url
+                  ? <img src={myFighterPreview.image_url} alt={myFighterPreview.display_name} />
+                  : <div className="preview-placeholder"><span>{myFighterPreview ? 'GTF' : 'VOCÊ'}</span><small>{myFighterPreview ? 'PERSONAGEM' : 'ESCOLHA UM LUTADOR'}</small></div>}
               </div>
               <span className="preview-label">LUTADOR SELECIONADO</span>
-              <h2>{selectedFighter?.display_name ?? 'Selecione um lutador'}</h2>
-              <p>{selectedFighter?.description ?? 'Escolha um personagem na grade ao lado para visualizar sua seleção.'}</p>
-              <div className="preview-status"><span /> PRONTO PARA A BATALHA</div>
+              <h2>{myFighterPreview?.display_name ?? 'Selecione um lutador'}</h2>
+              <p>{myFighterPreview?.description ?? 'Escolha um personagem na grade central para visualizar sua seleção.'}</p>
+              <div className="preview-status"><span className={queueEntry?.character_id ? 'is-confirmed' : ''} /> {queueEntry?.character_id ? 'LUTADOR CONFIRMADO' : 'SUA ESCOLHA'}</div>
             </aside>
           </div>
 
-          {versusMatched && <p className="selection-match-note"><strong>VS {opponentName || 'ADVERSÁRIO'}</strong> · A escolha é individual e simultânea.</p>}
+          {versusMatched && <p className="selection-match-note"><strong>VS {opponentName || 'ADVERSÁRIO'}</strong> · Os dois personagens são exibidos ao vivo. {queueEntry?.character_id ? 'Sua escolha está confirmada; aguardando o adversário.' : 'Escolha e confirme seu lutador.'}</p>}
           {queueError && <p className="feedback" role="alert">{queueError}</p>}
           <div className="selection-actions">
             <button className="logout-button" onClick={() => setView('lobby')}>CANCELAR</button>
-            <button className="primary-button selection-confirm" disabled={!chosen || queueLoading} onClick={saveFighter}>{queueLoading ? 'CONFIRMANDO...' : mode === 'VERSUS' ? 'CONFIRMAR LUTADOR' : 'CONFIRMAR LUTADOR'}</button>
+            <button className="primary-button selection-confirm" disabled={!chosen || queueLoading || (versusMatched && !!queueEntry?.character_id)} onClick={saveFighter}>{queueLoading ? 'CONFIRMANDO...' : versusMatched && queueEntry?.character_id ? 'LUTADOR CONFIRMADO' : 'CONFIRMAR LUTADOR'}</button>
           </div>
         </section>
       </main>
